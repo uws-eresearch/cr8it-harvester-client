@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:int-file="http://www.springframework.org/schema/integration/file"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+						http://www.springframework.org/schema/beans/spring-beans.xsd
+						http://www.springframework.org/schema/integration
+						http://www.springframework.org/schema/integration/spring-integration.xsd
+						http://www.springframework.org/schema/integration/file
+						http://www.springframework.org/schema/integration/file/spring-integration-file.xsd">
+
+<!-- 
+Configuration file for harvesting Cr8it archive files on the configured directory. 
+
+The files contents are sent verbatim across the wire. 
+
+Once run, whenever there is a new ZIP file in the "input" directory it will be processed.
+
+ -->	
+
+	<!-- See also: http://static.springsource.org/spring-integration/reference/htmlsingle/#channel-adapter
+		http://www.eaipatterns.com/ChannelAdapter.html -->
+	<int-file:inbound-channel-adapter id="filesIn" directory="${harvest.directory}" filename-pattern="*.zip">
+		<int:poller id="poller" fixed-rate="${harvest.pollRate}" max-messages-per-poll="${harvest.queueCapacity}" />
+	</int-file:inbound-channel-adapter>
+
+	<int:transformer id="copyFiles" input-channel="filesIn"
+		output-channel="routingChannel" ref="transformationHandler" method="handleFile"/>
+		
+	<int-file:outbound-channel-adapter id="jsonOut" directory="${harvest.output.json.directory}"
+		delete-source-files="${harvest.output.json.deletesource}" />
+		
+	<int:header-value-router header-name="file_extension" input-channel="routingChannel" 
+		resolution-required="false" default-output-channel="otherFilesOut">	
+		<int:mapping value="json" channel="jsonOut" />
+	</int:header-value-router>
+		
+	<int:channel id="routingChannel">
+		<int:interceptors>
+			<int:wire-tap channel="loggingChannel" />
+		</int:interceptors>
+	</int:channel>
+	
+	<int-file:outbound-channel-adapter
+		id="otherFilesOut" directory="${harvest.output.other.directory}"
+		delete-source-files="${harvest.output.other.deletesource}" />
+
+	<int:logging-channel-adapter id="loggingChannel"
+		expression="'Processing file: ' + headers.file_name + ' (' + headers.file_size + ' bytes) '" />
+
+	<bean id="transformationHandler"
+		class="au.edu.uws.eresearch.cr8it.TransformationHandler" />
+		
+	<bean id="placeholderProperties" class="au.com.redboxresearchdata.util.config.ConfigSlurperPlaceholderConfigurer">
+		<property name="environment" value="#{systemProperties['environment']}"/>
+		<property name="defaultEnvironment" value="production" />
+		<property name="location" value="#{systemProperties['cr8it.client.config.file']}" />
+	</bean>
+
+</beans>
