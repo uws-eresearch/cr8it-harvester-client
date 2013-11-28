@@ -1,4 +1,4 @@
-Cr8it harvest client
+Cr8it harvester client
 ================================================================================
 
 You can run the application by either
