@@ -17,6 +17,7 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<spring.integration.version>2.2.4.RELEASE</spring.integration.version>
+		<activemq.version>5.3.0</activemq.version>
 		<log4j.version>1.2.17</log4j.version>
 		<junit.version>4.11</junit.version>
 		<utilities.version>1.0.0.BUILD-SNAPSHOT</utilities.version>
@@ -92,6 +93,19 @@
 			<groupId>org.springframework.integration</groupId>
 			<artifactId>spring-integration-file</artifactId>
 			<version>${spring.integration.version}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>org.springframework.integration</groupId>
+			<artifactId>spring-integration-jms</artifactId>
+			<version>${spring.integration.version}</version> 
+ 		</dependency>
+ 		
+ 		<!--  ActiveMQ -->
+		<dependency>
+			<groupId>org.apache.activemq</groupId>
+			<artifactId>activemq-core</artifactId>
+			<version>${activemq.version}</version>
 		</dependency>
 
 		<!-- Logging -->

@@ -17,11 +17,13 @@
 package au.edu.uws.eresearch.cr8it;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Locale;
 
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.springframework.integration.Message;
@@ -46,7 +48,7 @@ public class TransformationHandler {
 	 * @return New Spring Integration message with updated headers
 	 */
 	@Transformer
-	public Message<String> handleFile(final Message<File> inputMessage) {
+	public Message<byte[]> handleFile(final Message<File> inputMessage) {
 
 		final File inputFile = inputMessage.getPayload();
 		final String filename = inputFile.getName();
@@ -57,24 +59,36 @@ public class TransformationHandler {
 		
 		if("zip".equals(fileExtension)){
 			//get json-ld data
-			inputAsString = getJsonData(inputFile, FilenameUtils.getName(filename));
+			
+			String inputAsJLString = getJsonData(inputFile, FilenameUtils.getName(filename));
 			
 			//TODO inputAsString data format is json-ld. We might have to convert it to json data that json-harvester-client
 			//undrestands
 			
-			if(inputAsString.length() > 0){
-				final Message<String> message = MessageBuilder.withPayload(inputAsString.toUpperCase(Locale.ENGLISH))
-							.setHeader(FileHeaders.FILENAME,      FilenameUtils.getBaseName(filename) + ".json")
-							.setHeader(FileHeaders.ORIGINAL_FILE, inputFile)
-							.setHeader("file_size", inputAsString.length())
-							.setHeader("file_extension", "json")
-							.build();
-		
-				return message;
-			}
-			else
-			{
-				System.out.println("Empty json string.");
+			inputAsString = getJsonMapping(inputAsJLString);
+			
+			try {
+				byte[] ba = FileUtils.readFileToByteArray(inputFile);
+			
+			
+				if(ba.length > 0){
+					final Message<byte[]> message = MessageBuilder.withPayload(ba)
+								.setHeader(FileHeaders.FILENAME,      filename)
+								.setHeader(FileHeaders.ORIGINAL_FILE, inputFile)
+								.setHeader("file_size", inputFile.length())
+								.setHeader("file_extension", "zip")
+								.build();
+			
+					return message;
+				}
+				else
+				{
+					System.out.println("Empty json string.");
+					return null;
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 				return null;
 			}
 		}
@@ -83,6 +97,73 @@ public class TransformationHandler {
 			System.out.println("Invalid file format");
 			return null;
 		}
+	}
+	
+	public String getJsonMapping(String json_ld){
+		
+		//If we get json string as an object, we can extract data easily.
+		String jsonString ="{\"type\": \"DatasetJson\","
+				+ "\"data\": {"
+				+ "\"data\": ["
+				+ "{"
+				+ "\"varMap\": {"
+				+ "\"file.path\": \"${fascinator.home}/packages/<oid>.tfpackage\""
+				+ "},"
+				+ "\"tfpackage\": {"
+				+ "\"redbox:embargo.redbox:isEmbargoed\": \"\","
+				+ "\"redbox:embargo.dc:date\": \"\","
+				+ "\"dc:created\": \"2013-12-06\","
+				+ "\"dc:creator.foaf:Person.1.foaf:givenName\": \"\","
+				+ "\"dc:creator.foaf:Person.1.foaf:familyName\": \"\","
+				+ "\"dc:creator.foaf:Person.1.foaf:name\": \"\","
+				+ "\"dc:title\": \"Lloyd Test\","
+				+ "\"title\": \"Just Lloyd Test\","
+				+ "\"dc:description\": \"Description for the test\","
+				+ "\"description\": \"Just Description for the test\","
+				+ "\"metaList\": ["
+				+ "\"dc:title\","
+				+ "\"dc:type.rdf:PlainLiteral\","
+				+ "\"dc:type.skos:prefLabel\","
+				+ "\"dc:created\","
+				+ "\"dc:modified\","
+				+ "\"dc:description\","
+				+ "\"xmlns:dc\","
+				+ "\"xmlns:foaf\","
+				+ "\"xmlns:anzsrc\""
+				+ "]},"
+				+ "\"datasetId\": \"someId\","
+				+ "\"owner\": \"admin\","
+				+ "\"attachmentDestination\": {"
+				+ "\"tfpackage\": ["
+				+ "\"<oid>.tfpackage\","
+				+ "\"metadata.json\","
+				+ "\"$file.path\""
+				+ "],"
+				+ "\"workflow.metadata\": ["
+				+ "\"workflow.metadata\""
+				+ "]"
+				+ "},"
+				+ "\"attachmentList\": ["
+				+ "\"tfpackage\","
+				+ "\"workflow.metadata\""
+				+ "],"
+				+ "\"customProperties\": ["
+				+ "\"file.path\""
+				+ "],"
+				+ "\"workflow.metadata\": {"
+				+ "\"id\": \"dataset\","
+				+ "\"formData\": {"
+				+ "\"title\": \"\","
+				+ "\"description\": \"\""
+				+ "},"
+				+ "\"pageTitle\": \"Metadata Record\","
+				+ "\"label\": \"Metadata Review\","
+				+ "\"step\": \"metadata-review\""
+				+ "}}"
+				+ "]}"
+				+ "}";
+		
+		return jsonString;
 	}
 	
 	/**

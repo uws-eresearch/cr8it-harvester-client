@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xmlns:int="http://www.springframework.org/schema/integration"
 	xmlns:int-file="http://www.springframework.org/schema/integration/file"
+	xmlns:int-jms="http://www.springframework.org/schema/integration/jms"
 	xsi:schemaLocation="http://www.springframework.org/schema/beans
 						http://www.springframework.org/schema/beans/spring-beans.xsd
 						http://www.springframework.org/schema/integration
 						http://www.springframework.org/schema/integration/spring-integration.xsd
 						http://www.springframework.org/schema/integration/file
-						http://www.springframework.org/schema/integration/file/spring-integration-file.xsd">
+						http://www.springframework.org/schema/integration/file/spring-integration-file.xsd
+						http://www.springframework.org/schema/integration/jms
+            			http://www.springframework.org/schema/integration/jms/spring-integration-jms.xsd" >
 
 <!-- 
 Configuration file for harvesting Cr8it archive files on the configured directory. 
@@ -23,9 +27,11 @@ Once run, whenever there is a new ZIP file in the "input" directory it will be p
 	<int-file:inbound-channel-adapter id="filesIn" directory="${harvest.directory}" filename-pattern="*.zip">
 		<int:poller id="poller" fixed-rate="${harvest.pollRate}" max-messages-per-poll="${harvest.queueCapacity}" />
 	</int-file:inbound-channel-adapter>
-
+	
 	<int:transformer id="copyFiles" input-channel="filesIn"
 		output-channel="routingChannel" ref="transformationHandler" method="handleFile"/>
+		
+	<int-jms:outbound-channel-adapter id="jmsOut" destination="requestQueue" channel="routingChannel"/>
 		
 	<int-file:outbound-channel-adapter id="jsonOut" directory="${harvest.output.json.directory}"
 		delete-source-files="${harvest.output.json.deletesource}" />
@@ -56,5 +62,12 @@ Once run, whenever there is a new ZIP file in the "input" directory it will be p
 		<property name="defaultEnvironment" value="production" />
 		<property name="location" value="#{systemProperties['cr8it.client.config.file']}" />
 	</bean>
+	
+	<bean id="connectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+        <property name="brokerURL" value="${activemq.url}" />
+    </bean>
+	<bean id="requestQueue" class="org.apache.activemq.command.ActiveMQQueue">
+		<constructor-arg value="cr8itHarvester"/>
+	</bean>	
 
 </beans>
