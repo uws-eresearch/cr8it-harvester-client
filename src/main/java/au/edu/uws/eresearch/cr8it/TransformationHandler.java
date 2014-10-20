@@ -18,14 +18,19 @@ package au.edu.uws.eresearch.cr8it;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Locale;
 
 import net.lingala.zip4j.core.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.io.IOUtils;
+import org.joda.time.LocalDate;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 import org.springframework.integration.Message;
 import org.springframework.integration.annotation.Transformer;
 import org.springframework.integration.file.FileHeaders;
@@ -48,7 +53,7 @@ public class TransformationHandler {
 	 * @return New Spring Integration message with updated headers
 	 */
 	@Transformer
-	public Message<byte[]> handleFile(final Message<File> inputMessage) {
+	public Message<String> handleFile(final Message<File> inputMessage) {
 
 		final File inputFile = inputMessage.getPayload();
 		final String filename = inputFile.getName();
@@ -56,39 +61,30 @@ public class TransformationHandler {
 
 		//populate this with json-ld data
 		final String inputAsString;
+		String finalString = "";
 		
 		if("zip".equals(fileExtension)){
-			//get json-ld data
-			
-			String inputAsJLString = getJsonData(inputFile, FilenameUtils.getName(filename));
-			
-			//TODO inputAsString data format is json-ld. We might have to convert it to json data that json-harvester-client
-			//undrestands
-			
-			inputAsString = getJsonMapping(inputAsJLString);
+			inputAsString = getJsonData(inputFile, FilenameUtils.getName(filename));
 			
 			try {
-				byte[] ba = FileUtils.readFileToByteArray(inputFile);
-			
-			
-				if(ba.length > 0){
-					final Message<byte[]> message = MessageBuilder.withPayload(ba)
-								.setHeader(FileHeaders.FILENAME,      filename)
-								.setHeader(FileHeaders.ORIGINAL_FILE, inputFile)
-								.setHeader("file_size", inputFile.length())
-								.setHeader("file_extension", "zip")
-								.build();
-			
-					return message;
-				}
-				else
-				{
-					System.out.println("Empty json string.");
-					return null;
-				}
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
+				finalString = getJsonMapping(inputAsString);
+			} catch (IOException | ParseException e) {
 				e.printStackTrace();
+			}
+			
+			if(finalString.length() > 0){
+				final Message<String> message = MessageBuilder.withPayload(finalString)
+							.setHeader(FileHeaders.FILENAME,      FilenameUtils.getBaseName(filename) + ".json")
+							.setHeader(FileHeaders.ORIGINAL_FILE, inputFile)
+							.setHeader("file_size", finalString.length())
+							.setHeader("file_extension", "json")
+							.build();
+		
+				return message;
+			}
+			else
+			{
+				System.out.println("Empty json string.");
 				return null;
 			}
 		}
@@ -99,75 +95,8 @@ public class TransformationHandler {
 		}
 	}
 	
-	public String getJsonMapping(String json_ld){
-		
-		//If we get json string as an object, we can extract data easily.
-		String jsonString ="{\"type\": \"DatasetJson\","
-				+ "\"data\": {"
-				+ "\"data\": ["
-				+ "{"
-				+ "\"varMap\": {"
-				+ "\"file.path\": \"${fascinator.home}/packages/<oid>.tfpackage\""
-				+ "},"
-				+ "\"tfpackage\": {"
-				+ "\"redbox:embargo.redbox:isEmbargoed\": \"\","
-				+ "\"redbox:embargo.dc:date\": \"\","
-				+ "\"dc:created\": \"2013-12-06\","
-				+ "\"dc:creator.foaf:Person.1.foaf:givenName\": \"\","
-				+ "\"dc:creator.foaf:Person.1.foaf:familyName\": \"\","
-				+ "\"dc:creator.foaf:Person.1.foaf:name\": \"\","
-				+ "\"dc:title\": \"Lloyd Test\","
-				+ "\"title\": \"Just Lloyd Test\","
-				+ "\"dc:description\": \"Description for the test\","
-				+ "\"description\": \"Just Description for the test\","
-				+ "\"metaList\": ["
-				+ "\"dc:title\","
-				+ "\"dc:type.rdf:PlainLiteral\","
-				+ "\"dc:type.skos:prefLabel\","
-				+ "\"dc:created\","
-				+ "\"dc:modified\","
-				+ "\"dc:description\","
-				+ "\"xmlns:dc\","
-				+ "\"xmlns:foaf\","
-				+ "\"xmlns:anzsrc\""
-				+ "]},"
-				+ "\"datasetId\": \"someId\","
-				+ "\"owner\": \"admin\","
-				+ "\"attachmentDestination\": {"
-				+ "\"tfpackage\": ["
-				+ "\"<oid>.tfpackage\","
-				+ "\"metadata.json\","
-				+ "\"$file.path\""
-				+ "],"
-				+ "\"workflow.metadata\": ["
-				+ "\"workflow.metadata\""
-				+ "]"
-				+ "},"
-				+ "\"attachmentList\": ["
-				+ "\"tfpackage\","
-				+ "\"workflow.metadata\""
-				+ "],"
-				+ "\"customProperties\": ["
-				+ "\"file.path\""
-				+ "],"
-				+ "\"workflow.metadata\": {"
-				+ "\"id\": \"dataset\","
-				+ "\"formData\": {"
-				+ "\"title\": \"\","
-				+ "\"description\": \"\""
-				+ "},"
-				+ "\"pageTitle\": \"Metadata Record\","
-				+ "\"label\": \"Metadata Review\","
-				+ "\"step\": \"metadata-review\""
-				+ "}}"
-				+ "]}"
-				+ "}";
-		
-		return jsonString;
-	}
-	
 	/**
-	 * Should return a json data out of README.html
+	 * Return manifest.json as a string
 	 * 
 	 * @param archive
 	 * @param archiveName
@@ -175,35 +104,80 @@ public class TransformationHandler {
 	 */
 	private String getJsonData(File archive, String archiveName){
 		
-		//extract zip file and return location
 		String extractedPath = extractZipArchive(archive, archiveName);
-		String readmeFilePath = extractedPath + "/data/README.html";
-		File readmeFile = new File(readmeFilePath);
-		String jsonData = "";
-		if(readmeFile.exists()){
-			try
-	        {
-				//execute python process on README.html file at the location
-	            Runtime r = Runtime.getRuntime();
-	            String command = "python /opt/RDFLib/pyrdfa3/scripts/localRDFa.py -j " + readmeFilePath;
-	            Process p = r.exec(command);
-	            	            
-	            jsonData = IOUtils.toString(p.getInputStream());
-	            
-	        }
-	        catch (Exception e)
-	        {
-		        String cause = e.getMessage();
-		        if (cause.equals("python: not found"))
-		        {
-		        	System.out.println("No python interpreter found.");
-		        }
-	        }
-		}
-		else{
-			System.out.println("No README file. Return empty string");
-		}
+		String manifestFilePath = extractedPath + "/data/manifest.json";
+		String jsonData = readFile(manifestFilePath);
 		return jsonData;
+	}
+	
+	private String getJsonMapping(String jsonString) throws IOException, ParseException{ 
+		
+		String template = readFile("./template.json");
+		JSONParser parser = new JSONParser();
+		JSONObject original = (JSONObject) parser.parse(template);
+		JSONObject manifest = (JSONObject) parser.parse(jsonString);
+		
+		JSONObject dataObject = (JSONObject) original.get("data");
+		JSONArray dataArray = (JSONArray) dataObject.get("data");
+		
+		JSONArray creators = (JSONArray) manifest.get("creators");
+		JSONArray activities = (JSONArray) manifest.get("activities");
+		JSONArray vfs = (JSONArray) manifest.get("vfs");
+		
+		LocalDate today = new LocalDate();
+		int creatorIndex = 1;
+		int grantIndex = 1;
+		for(Object data : dataArray){
+			
+			((JSONObject) data).put("datasetId", jsonString.hashCode());
+			JSONObject tfpackage =  (JSONObject) ((JSONObject) data).get("tfpackage");
+			tfpackage.put("dc:created", today.toString());
+			
+			Object root = vfs.get(0);
+			if(root != null){
+				String crateName = (String) ((JSONObject) root).get("name");
+				tfpackage.put("dc:title", crateName);
+				tfpackage.put("title", crateName);
+			}
+			for(Object creator : creators){
+				//TODO we might need to split the name into first and last name
+				String name = (String) ((JSONObject) creator).get("name");
+				tfpackage.put("dc:creator.foaf:Person." + creatorIndex + ".foaf:name", name);
+				
+				String identifier = (String) ((JSONObject) creator).get("identifier");
+				tfpackage.put("dc:creator.foaf:Person." + creatorIndex + ".dc:identifier", identifier);
+				
+				creatorIndex++;
+			}
+			for(Object activity : activities){
+				String identifier = (String) ((JSONObject) activity).get("identifier");
+				tfpackage.put("foaf:fundedBy.vivo:Grant." + grantIndex + ".dc:identifier", identifier);
+				
+				String grantNumber = (String) ((JSONObject) activity).get("grant_number");
+				tfpackage.put("foaf:fundedBy.vivo:Grant." + grantIndex + ".redbox:grantNumber", grantNumber);
+				
+				String title = (String) ((JSONObject) activity).get("title");
+				String repositoryName = (String) ((JSONObject) activity).get("repository_name");
+				tfpackage.put("foaf:fundedBy.vivo:Grant." + grantIndex + ".skos:prefLabel", "(" + repositoryName + ") " + title);
+				
+				grantIndex++;
+			}
+			
+		}
+		String updatedJson = original.toJSONString();
+		return updatedJson;
+		
+	}
+	
+	private static String readFile(String path) 
+	{
+		byte[] encoded = null;
+		try {
+			encoded = Files.readAllBytes(Paths.get(path));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return new String(encoded);
 	}
 	
 	/**

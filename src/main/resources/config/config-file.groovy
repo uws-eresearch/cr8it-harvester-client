@@ -41,7 +41,7 @@ environments {
 			queueCapacity = "10"
 			output {
 				json {
-					directory = "/home/lloyd/UWS/REDBOX/json-harvester-client-1.0.0.BUILD-20140618.232015-49-bin/output/json"
+					directory = "json-harvester-client/input"
 					deletesource = "true"
 				}
 				other {
